@@ -14,6 +14,7 @@ import os
 from vector_store import SuperstoreVectorStore, initialize_vector_store
 from data_processor import SuperstoreDataProcessor
 from rag_tools import create_rag_tools
+from memory_optimizer import optimize_memory_usage, check_memory_usage, force_cleanup
 
 # --- 1. Page Configuration and Title ---
 
@@ -47,21 +48,41 @@ if not google_api_key:
 # --- 3. Initialize RAG Components ---
 @st.cache_resource
 def initialize_rag_components():
-    """Initialize RAG components with caching for better performance"""
+    """Initialize all RAG components with error handling"""
+    
     try:
+        # Memory optimization
+        optimize_memory_usage()
+        force_cleanup()
+        
         # Initialize data processor
-        data_processor = SuperstoreDataProcessor("Superstore Dataset - Orders.csv")
+        data_processor = SuperstoreDataProcessor()
+        force_cleanup()
         
         # Initialize vector store
         vector_store = initialize_vector_store(data_processor)
+        force_cleanup()
         
         # Create RAG tools
         tools = create_rag_tools(vector_store, data_processor)
+        force_cleanup()
         
         return data_processor, vector_store, tools
+        
     except Exception as e:
         st.error(f"Error initializing RAG components: {str(e)}")
-        return None, None, []
+        st.warning("Trying fallback mode with data processor only...")
+        
+        try:
+            # Fallback: only initialize data processor
+            data_processor = SuperstoreDataProcessor()
+            data_processor.load_data()
+            
+            return data_processor, None, None
+        except Exception as fallback_error:
+            st.error(f"Fallback also failed: {str(fallback_error)}")
+            force_cleanup()
+            return None, None, None
 
 # Initialize RAG components
 data_processor, vector_store, tools = initialize_rag_components()
@@ -78,7 +99,7 @@ if ("agent" not in st.session_state) or (getattr(st.session_state, "_last_key", 
         llm = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",
             google_api_key=google_api_key,
-            temperature=0.9,
+            temperature=0.7,
             top_k=50,
             top_p=0.9
         )
@@ -163,89 +184,96 @@ st.markdown("**Pilih salah satu pertanyaan berikut untuk memulai analisis:**")
 # Add custom CSS for compact suggestion buttons
 st.markdown("""
 <style>
+/* Reset and base styles */
 .suggestion-container {
-    margin: 5px 0;
+    margin: 15px 0;
+    clear: both;
+    width: 100%;
 }
 
+/* Button styling */
 .stButton > button {
-    width: auto !important;
-    height: auto;
-    min-height: 24px !important;
+    width: 100% !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    max-height: 40px !important;
     background: #2d2d2d !important;
     border: 1px solid #404040 !important;
-    border-radius: 12px !important;
+    border-radius: 6px !important;
     color: #cccccc !important;
     font-weight: 400 !important;
-    font-size: 11px !important;
-    text-align: center;
-    padding: 4px 12px !important;
-    margin: 0 6px 12px 0 !important;
-    transition: all 0.2s ease;
-    box-shadow: none;
-    position: relative;
-    overflow: hidden;
-    line-height: 1.2;
-    display: inline-block !important;
+    font-size: 13px !important;
+    text-align: center !important;
+    padding: 0 8px !important;
+    margin: 0 0 8px 0 !important;
+    transition: all 0.2s ease !important;
+    box-shadow: none !important;
+    position: relative !important;
+    overflow: hidden !important;
+    line-height: 1.2 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
     white-space: nowrap !important;
-    clear: both !important;
+    text-overflow: ellipsis !important;
+    box-sizing: border-box !important;
 }
 
 .stButton > button:hover {
     background: #3a3a3a !important;
     border: 1px solid #555555 !important;
     color: #ffffff !important;
-    transform: none;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
 }
 
 .stButton > button:active {
     background: #404040 !important;
-    transform: none;
+    transform: translateY(0px) !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
 }
 
-/* Make all buttons consistent */
-.stButton:nth-child(n) > button {
-    background: #3a3a3a !important;
-    border: 1px solid #555555 !important;
-}
-
-.stButton:nth-child(n) > button:hover {
-    background: #4a4a4a !important;
-    border-color: #666666 !important;
-}
-
-/* Column spacing */
+/* Column layout fixes */
 .stColumn {
-    padding: 0;
+    padding: 0 2px !important;
+    margin: 0 !important;
+    min-width: 0 !important;
+    flex: 1 !important;
 }
 
-/* Container for inline buttons */
+.stColumn > div {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Container for suggestion buttons */
 .suggestion-buttons {
     display: block !important;
-    margin-bottom: 20px !important;
+    margin: 20px 0 !important;
     width: 100% !important;
+    clear: both !important;
+    overflow: hidden !important;
 }
 
 .suggestion-row {
     display: flex !important;
-    flex-wrap: nowrap !important;
-    gap: 8px !important;
+    gap: 4px !important;
     margin-bottom: 8px !important;
     width: 100% !important;
-    justify-content: flex-start !important;
-    align-items: center !important;
+    align-items: stretch !important;
 }
 
-.suggestion-row .stButton {
-    flex: 0 0 auto !important;
+/* Ensure buttons in columns don't overlap */
+.suggestion-row .stColumn .stButton {
     margin: 0 !important;
-    width: auto !important;
+    width: 100% !important;
+    display: block !important;
 }
 
-.suggestion-row .stButton > button {
+.suggestion-row .stColumn .stButton > button {
     margin: 0 !important;
-    white-space: nowrap !important;
-    min-width: fit-content !important;
+    width: 100% !important;
 }
 
 /* Chat input styling */
@@ -281,6 +309,70 @@ for msg in st.session_state.messages:
         st.markdown(msg["content"])
 
 # --- 8. Chat Input and Response Generation ---
+
+def handle_direct_query(data_processor, query):
+    """Handle queries directly using data processor when RAG tools fail"""
+    if data_processor is None or data_processor.df is None:
+        return "Data tidak tersedia untuk query ini."
+    
+    df = data_processor.df
+    query_lower = query.lower()
+    
+    try:
+        # Handle top customers queries
+        if any(keyword in query_lower for keyword in ['pelanggan teratas', 'top customer', 'customer teratas', 'pelanggan terbaik']):
+            top_customers = df.groupby('Customer Name').agg({
+                'Sales': 'sum',
+                'Profit': 'sum',
+                'Order ID': 'nunique'
+            }).sort_values('Sales', ascending=False).head(5)
+            
+            result = "🏆 **Top 5 Pelanggan Berdasarkan Penjualan:**\n\n"
+            for i, (customer, data) in enumerate(top_customers.iterrows(), 1):
+                result += f"{i}. **{customer}**\n"
+                result += f"   - Sales: ${data['Sales']:,.2f}\n"
+                result += f"   - Orders: {data['Order ID']}\n"
+                result += f"   - Profit: ${data['Profit']:,.2f}\n\n"
+            return result
+        
+        # Handle furniture profit queries
+        elif any(keyword in query_lower for keyword in ['furniture', 'profit tertinggi', 'produk furniture']):
+            furniture_df = df[df['Category'] == 'Furniture']
+            if len(furniture_df) == 0:
+                return "Tidak ada produk furniture ditemukan dalam dataset."
+            
+            top_furniture = furniture_df.groupby('Product Name').agg({
+                'Sales': 'sum',
+                'Profit': 'sum',
+                'Quantity': 'sum'
+            }).sort_values('Profit', ascending=False).head(5)
+            
+            result = "🪑 **Top 5 Produk Furniture dengan Profit Tertinggi:**\n\n"
+            for i, (product, data) in enumerate(top_furniture.iterrows(), 1):
+                result += f"{i}. **{product}**\n"
+                result += f"   - Sales: ${data['Sales']:,.2f}\n"
+                result += f"   - Profit: ${data['Profit']:,.2f}\n"
+                result += f"   - Quantity: {data['Quantity']}\n\n"
+            return result
+        
+        # Handle general statistics queries
+        elif any(keyword in query_lower for keyword in ['statistik', 'summary', 'ringkasan', 'total']):
+            stats = data_processor.get_summary_stats()
+            result = "**Ringkasan Dataset Superstore:**\n\n"
+            result += f"- **Total Records:** {stats['total_records']:,}\n"
+            result += f"- **Total Sales:** ${stats['total_sales']:,.2f}\n"
+            result += f"- **Total Profit:** ${stats['total_profit']:,.2f}\n"
+            result += f"- **Unique Customers:** {stats['unique_customers']:,}\n"
+            result += f"- **Unique Products:** {stats['unique_products']:,}\n"
+            result += f"- **Categories:** {', '.join(stats['categories'])}\n"
+            result += f"- **Regions:** {', '.join(stats['regions'])}\n"
+            return result
+        
+        else:
+            return "Query tidak dikenali. Coba tanyakan tentang:\n- Pelanggan teratas\n- Produk furniture dengan profit tertinggi\n- Statistik dataset"
+            
+    except Exception as e:
+        return f"Error memproses query: {str(e)}"
 
 # Handle suggested question clicks
 if "suggested_question" in st.session_state:
@@ -339,7 +431,7 @@ with cols2[2]:
         st.rerun()
 
 with cols2[3]:
-    if st.button("Produk menguntungkan", key="q6"):
+    if st.button("Produk profit", key="q6"):
         st.session_state.suggested_question = "Produk apa yang paling menguntungkan?"
         st.rerun()
 
@@ -366,11 +458,24 @@ if user_input:
     with st.chat_message("assistant"):
         with st.spinner("Searching dataset and generating response..."):
             try:
-                # Get response from the agent
-                response = st.session_state.agent.invoke({"messages": [HumanMessage(content=user_input)]})
+                # Try RAG tools first if available
+                if tools is not None:
+                    try:
+                        # Get response from the agent
+                        response = st.session_state.agent.invoke({"messages": [HumanMessage(content=user_input)]})
+                        
+                        # Extract the assistant's message
+                        assistant_message = response["messages"][-1].content
+                        
+                    except Exception as rag_error:
+                        st.warning(f"RAG tools error: {str(rag_error)}")
+                        st.info("Menggunakan fallback mode...")
+                        assistant_message = handle_direct_query(data_processor, user_input)
                 
-                # Extract the assistant's message
-                assistant_message = response["messages"][-1].content
+                else:
+                    # Use direct query handling when RAG tools not available
+                    st.info("Menggunakan direct data access...")
+                    assistant_message = handle_direct_query(data_processor, user_input)
                 
                 # Display the response
                 st.write(assistant_message)

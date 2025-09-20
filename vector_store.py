@@ -1,6 +1,9 @@
 # Vector store implementation using ChromaDB
+# Updated for ChromaDB v1.0+ compatibility
+import os
+import sys
+
 import chromadb
-from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 from typing import List, Dict, Any, Optional
 import os
@@ -21,18 +24,32 @@ class SuperstoreVectorStore:
         self.persist_directory = persist_directory
         self.embedding_model_name = embedding_model
         
-        # Initialize embedding model
+        # Initialize embedding model with memory optimization
         print(f"Loading embedding model: {embedding_model}")
-        self.embedding_model = SentenceTransformer(embedding_model)
-        
-        # Initialize ChromaDB client
-        self.client = chromadb.PersistentClient(
-            path=persist_directory,
-            settings=Settings(
-                anonymized_telemetry=False,
-                allow_reset=True
-            )
+        self.embedding_model = SentenceTransformer(
+            embedding_model,
+            device='cpu'  # Force CPU usage to reduce memory pressure
         )
+        
+        # Initialize ChromaDB client with robust error handling
+        try:
+            # First try EphemeralClient to test basic functionality
+            print("Testing ChromaDB connection...")
+            test_client = chromadb.EphemeralClient()
+            test_client.heartbeat()
+            print("ChromaDB basic connection test passed")
+            
+            # Use the original persist directory
+            print(f"Initializing PersistentClient at: {persist_directory}")
+            self.client = chromadb.PersistentClient(path=persist_directory)
+            print("ChromaDB PersistentClient initialized successfully")
+            
+        except Exception as e:
+            print(f"Error with PersistentClient: {e}")
+            print("Falling back to EphemeralClient...")
+            self.client = chromadb.EphemeralClient()
+            self.persist_directory = None
+            print("Using EphemeralClient (data will not persist between sessions)")
         
         # Get or create collection
         self.collection = self._get_or_create_collection()
@@ -54,10 +71,30 @@ class SuperstoreVectorStore:
             return collection
     
     def embed_documents(self, documents: List[Dict[str, Any]]) -> List[List[float]]:
-        """Generate embeddings for documents"""
+        """Generate embeddings for documents with memory optimization"""
         texts = [doc["content"] for doc in documents]
-        embeddings = self.embedding_model.encode(texts, show_progress_bar=True)
-        return embeddings.tolist()
+        
+        # Process embeddings in smaller batches to reduce memory usage
+        batch_size = 50  # Reduced from processing all at once
+        all_embeddings = []
+        
+        print(f"Generating embeddings for {len(texts)} documents in batches of {batch_size}...")
+        
+        for i in range(0, len(texts), batch_size):
+            end_idx = min(i + batch_size, len(texts))
+            batch_texts = texts[i:end_idx]
+            
+            # Generate embeddings for this batch
+            batch_embeddings = self.embedding_model.encode(
+                batch_texts, 
+                show_progress_bar=True,
+                batch_size=16  # Further reduce internal batch size
+            )
+            
+            all_embeddings.extend(batch_embeddings.tolist())
+            print(f"Processed embedding batch {i//batch_size + 1}/{(len(texts)-1)//batch_size + 1}")
+        
+        return all_embeddings
     
     def add_documents(self, documents: List[Dict[str, Any]], force_reload: bool = False):
         """Add documents to the vector store"""
@@ -83,7 +120,7 @@ class SuperstoreVectorStore:
         metadatas = [doc["metadata"] for doc in documents]
         
         # Add to collection in batches
-        batch_size = 100
+        batch_size = 50  # Reduced batch size for memory optimization
         for i in range(0, len(documents), batch_size):
             end_idx = min(i + batch_size, len(documents))
             
@@ -95,6 +132,10 @@ class SuperstoreVectorStore:
             )
             
             print(f"Added batch {i//batch_size + 1}/{(len(documents)-1)//batch_size + 1}")
+            
+            # Force garbage collection after each batch to free memory
+            import gc
+            gc.collect()
         
         print(f"Successfully added {len(documents)} documents to vector store")
     
