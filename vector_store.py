@@ -3,6 +3,13 @@
 import os
 import sys
 
+# Override SQLite for Streamlit Cloud compatibility
+try:
+    import pysqlite3
+    sys.modules['sqlite3'] = pysqlite3
+except ImportError:
+    pass
+
 import chromadb
 from sentence_transformers import SentenceTransformer
 from typing import List, Dict, Any, Optional

@@ -1,3 +1,11 @@
+# SQLite override for Streamlit Cloud compatibility
+try:
+    import pysqlite3
+    import sys
+    sys.modules['sqlite3'] = pysqlite3
+except ImportError:
+    pass
+
 # Import the necessary libraries
 import streamlit as st  # For creating the web app interface
 from langchain_google_genai import ChatGoogleGenerativeAI  # For interacting with Google Gemini via LangChain
