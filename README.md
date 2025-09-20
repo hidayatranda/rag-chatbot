@@ -9,7 +9,7 @@ Chatbot berbasis RAG (Retrieval-Augmented Generation) yang dibangun menggunakan 
 - **LangGraph Agent**: Agent berbasis ReAct pattern untuk reasoning dan tool usage
 - **Google Gemini Integration**: Menggunakan model Gemini 2.5 Flash untuk natural language processing
 - **Interactive UI**: Interface web yang user-friendly dengan Streamlit
-- **Dataset Analysis**: Analisis mendalam dataset Superstore dengan 9,994 records
+- **Dataset Analysis**: Analisis mendalam dataset Superstore
 - **Real-time Search**: Pencarian semantik real-time pada data penjualan
 
 ## Struktur Proyek
