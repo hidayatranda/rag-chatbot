@@ -78,9 +78,11 @@ if ("agent" not in st.session_state) or (getattr(st.session_state, "_last_key", 
         llm = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",
             google_api_key=google_api_key,
-            temperature=0.7
+            temperature=0.9,
+            top_k=50,
+            top_p=0.9
         )
-        
+
         # Create the agent with RAG tools
         st.session_state.agent = create_react_agent(
             model=llm,
