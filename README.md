@@ -1,4 +1,5 @@
-# Nxtneura RAG Chatbot
+# Nxtneura RAG Chatbot 
+url: https://nxtneura.streamlit.app/
 
 Chatbot berbasis RAG (Retrieval-Augmented Generation) yang dibangun menggunakan Streamlit, LangGraph, dan Google Gemini untuk analisis dataset Superstore e-commerce.
 
